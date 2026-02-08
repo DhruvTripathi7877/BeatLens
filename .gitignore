@@ -1,24 +1,56 @@
-# Compiled class file
+# === Java / Maven ===
+target/
 *.class
-
-# Log file
-*.log
-
-# BlueJ files
-*.ctxt
-
-# Mobile Tools for Java (J2ME)
-.mtj.tmp/
-
-# Package Files #
 *.jar
 *.war
-*.nar
 *.ear
+*.nar
 *.zip
 *.tar.gz
 *.rar
-
-# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
 replay_pid*
+
+# === Spring Boot ===
+*.log
+*.log.*
+
+# === IDE ===
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+.factorypath
+*.ctxt
+
+# === macOS ===
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# === Node / Frontend ===
+node_modules/
+dist/
+.env
+.env.local
+.env.*.local
+
+# === H2 Database files ===
+*.db
+*.mv.db
+*.trace.db
+
+# === Build artifacts ===
+build/
+out/
+
+# === Maven wrapper (keep .mvn/wrapper but ignore downloaded jar) ===
+.mvn/wrapper/maven-wrapper.jar

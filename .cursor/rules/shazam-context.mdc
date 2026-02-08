@@ -1,0 +1,295 @@
+---
+description: BeatLens audio fingerprinting project - algorithm details, constants, and design decisions
+globs:
+alwaysApply: true
+---
+
+# BeatLens Audio Fingerprinting - Project Context
+
+BeatLens is a production-grade audio fingerprinting and recognition application,
+rewritten from a prototype Shazam clone. This rule captures all institutional
+knowledge so that every AI conversation has full algorithmic and architectural context.
+
+Original prototype codebase: `/Users/dhruvtri/Downloads/temp-shazam/src/`
+
+---
+
+## Architecture Overview
+
+The system has three phases:
+
+1. **Fingerprinting Pipeline**: Audio -> Spectrogram -> Peaks -> Fingerprints
+2. **Indexing (offline)**: Process reference songs, store fingerprints in a database
+3. **Matching (real-time)**: Fingerprint a query clip, look up hashes, score via time-alignment histograms
+
+### Production Source Layout
+
+Core algorithm classes live in `backend/src/main/java/com/beatlens/core/` — pure Java with no Spring dependencies, for testability:
+
+| Class | Responsibility |
+|-------|---------------|
+| `AudioConstants` | All tuned parameters (sample rate, FFT, peak detection, fingerprinting) — configurable via `application.yml` |
+| `AudioProcessor` | WAV file reading, byte-to-sample conversion |
+| `SpectrogramGenerator` | Hann windowing + Apache Commons Math FFT -> magnitude spectrogram |
+| `PeakDetector` | Local-maximum peak extraction with frequency band segmentation |
+| `FingerprintGenerator` | Constellation pairing (anchor + target) and hash generation |
+| `SongMatcher` | Hash lookup + time-alignment histogram scoring |
+
+Spring-managed layers wrap these in `controller/`, `service/`, `repository/`, `model/`.
+
+---
+
+## Algorithm Details
+
+### 1. Audio Capture & Preprocessing (`AudioProcessor`)
+
+- **Format**: 44100 Hz, 16-bit signed, mono, little-endian
+- Reads WAV files via `javax.sound.sampled.AudioSystem`
+- Automatically converts non-standard formats to the target format
+- Samples are normalized to `[-1.0, 1.0]` by dividing `short` values by `32768.0`
+
+### 2. Spectrogram Generation (`SpectrogramGenerator`)
+
+- **Windowing**: Hann window (`w[n] = 0.5 * (1 - cos(2*pi*n/(N-1)))`)
+  - Chosen for good sidelobe suppression, simplicity, and COLA (Constant Overlap-Add) property at 50% overlap
+  - Pre-computed once in the constructor
+- **FFT**: Apache Commons Math 3 `FastFourierTransformer` (replaces prototype's custom Cooley-Tukey)
+  - Apply Hann window to frame, then call `transformer.transform(data, TransformType.FORWARD)`
+  - Extract magnitudes from `Complex[]` output: `magnitude = sqrt(re^2 + im^2)`
+  - Only positive-frequency magnitudes are kept (`frameSize/2` bins)
+- **Output**: `double[numFrames][frameSize/2]` — each row is one time frame
+- **Frame count formula**: `numFrames = (samples.length - frameSize) / hopSize + 1`
+
+### 3. Peak Detection (`PeakDetector`)
+
+Uses a **combined local-maximum + frequency-band** approach:
+
+1. Compute global max across entire spectrogram
+2. Set threshold = `globalMax * PEAK_MIN_AMPLITUDE` (0.01 = 1% of max)
+3. For each time frame:
+   - Iterate over each frequency band (5 bands defined by `FREQUENCY_BANDS`)
+   - Within each band, find points that are **strict local maxima** in a 2D neighborhood of radius `PEAK_NEIGHBORHOOD_SIZE` (20 bins in both time and frequency)
+   - A point must be strictly greater than ALL neighbors in the rectangular neighborhood
+4. Sort candidates by magnitude descending, keep top `PEAKS_PER_FRAME` (5) per frame
+
+The frequency-band approach ensures peaks are captured across the full spectrum (bass through treble), not just from the loudest region.
+
+### 4. Fingerprint Generation (`FingerprintGenerator`)
+
+Uses the **constellation map** approach from the original Shazam paper:
+
+1. Sort all peaks by time (frame index)
+2. For each **anchor** peak, look ahead for **target** peaks:
+   - Skip targets closer than `TARGET_ZONE_SIZE` frames (5)
+   - Skip targets farther than `MAX_TIME_DELTA` frames (200)
+   - Create up to `FAN_OUT` (15) fingerprints per anchor
+3. Each fingerprint stores:
+   - `freq1` (anchor frequency bin)
+   - `freq2` (target frequency bin)
+   - `timeDelta` (frame difference: target - anchor)
+   - `anchorTime` (frame index of anchor, used for time-alignment during matching)
+
+#### Hash Formula
+
+```
+hash = ((long) freq1 << 20) | ((long) freq2 << 10) | timeDelta
+```
+
+This packs three values into a 30-bit hash stored as a `long`:
+- Bits 29-20: `freq1` (10 bits, values 0-1023)
+- Bits 19-10: `freq2` (10 bits, values 0-1023)
+- Bits 9-0: `timeDelta` (10 bits, values 0-1023)
+
+The hash is collision-free for the encoded domain (distinct (f1, f2, dt) tuples always produce distinct hashes).
+
+#### Fingerprint Density (typical 3-minute song)
+
+- ~21.5 frames/second (at 46.4ms per frame)
+- ~5 peaks per frame
+- ~15 fingerprints per peak (fan-out)
+- Total: ~290,000 fingerprints per 3-minute song
+
+### 5. Database & Caching
+
+**Persistence**: PostgreSQL via Spring Data JPA with Flyway-managed schema.
+
+**Caching**: Caffeine (not a full heap load on startup). The fingerprint lookup cache uses a **lazy-loading** strategy:
+- **Cache key**: fingerprint hash (`Long`)
+- **Cache value**: `List<FingerprintEntry>` (songId + timeOffset pairs for that hash)
+- **On match query**: check Caffeine cache first; on miss, query PostgreSQL and populate cache
+- **Eviction**: size-based (default max 500K entries) + time-based (expire 30 min after last access)
+- **Why not load-all-on-startup**: A 3-minute song generates ~290K fingerprints. At 1,000 songs that's ~290M entries — multiple GB of heap. Caffeine bounds memory and keeps only hot (recently queried) hashes in cache.
+- **Metrics**: `recordStats` enabled, exposed via Spring Boot Actuator `/actuator/caches` endpoint for monitoring hit/miss rates.
+
+There is also a `song-metadata` cache for frequently accessed song info lookups.
+
+Spring's `@Cacheable` / `@CacheEvict` annotations are used on the repository/service layer:
+- `@Cacheable("fingerprint-lookup")` on the hash lookup method
+- `@CacheEvict(value = "fingerprint-lookup", allEntries = true)` when a song is indexed or deleted (invalidates stale entries)
+
+### 6. Matching Algorithm (`SongMatcher`)
+
+Three-step process:
+
+**Step 1 — Hash Lookup**: For each query fingerprint, look up the hash in Caffeine cache (O(1) on hit) or fall back to PostgreSQL query (indexed on `hash` column). Returns all `(songId, timeOffset)` entries that share the same hash.
+
+**Step 2 — Time Alignment (Histogram)**: For each candidate song, build a histogram of time offsets:
+- `offset = databaseTimeOffset - queryAnchorTime`
+- Offsets are binned with tolerance: `binned = (offset / OFFSET_TOLERANCE) * OFFSET_TOLERANCE`
+- `OFFSET_TOLERANCE = 2` frames
+
+**Step 3 — Scoring**: For each candidate song:
+1. Find the histogram peak (offset with highest count)
+2. Count aligned matches within `OFFSET_TOLERANCE * 2` of the peak
+3. Skip songs with fewer than `MIN_ALIGNED_MATCHES` (3) aligned matches
+4. Calculate confidence score:
+   ```
+   baseScore = alignedMatches
+   coherence = alignedMatches / totalMatches
+   matchRate = alignedMatches / queryFingerprintCount
+   sharpness = 1.0 / sqrt(histogramBuckets)
+   confidence = baseScore * (0.5 + 0.3*coherence + 0.2*matchRate) * (1 + sharpness)
+   confidence = min(100, confidence / 2.0)
+   ```
+5. Skip results below `MIN_CONFIDENCE` (5.0%)
+6. Convert frame offset to seconds: `timeOffsetSeconds = bestOffset * TIME_RESOLUTION`
+7. Return results sorted by confidence descending
+
+---
+
+## All Tuned Constants (`AudioConstants`)
+
+### Audio Capture
+| Constant | Value | Rationale |
+|----------|-------|-----------|
+| `SAMPLE_RATE` | 44100 Hz | CD quality, covers full human hearing range via Nyquist |
+| `BITS_PER_SAMPLE` | 16 | 96 dB dynamic range, standard |
+| `BYTES_PER_SAMPLE` | 2 | Derived from bits |
+| `CHANNELS` | 1 (mono) | Simplifies processing, sufficient for fingerprinting |
+
+### Spectrogram
+| Constant | Value | Rationale |
+|----------|-------|-----------|
+| `FRAME_SIZE` | 4096 samples | ~93ms window, ~10.77 Hz frequency resolution, power of 2 for FFT |
+| `HOP_SIZE` | 2048 (FRAME_SIZE/2) | 50% overlap, standard practice, COLA with Hann window |
+| `FREQUENCY_RESOLUTION` | ~10.77 Hz | SAMPLE_RATE / FRAME_SIZE |
+| `TIME_RESOLUTION` | ~0.0464 s (~46.4ms) | HOP_SIZE / SAMPLE_RATE |
+| `NUM_FREQUENCY_BINS` | 2048 | FRAME_SIZE / 2 (positive frequencies only) |
+| `MAX_FREQUENCY` | 22050 Hz | Nyquist = SAMPLE_RATE / 2 |
+
+### Peak Detection
+| Constant | Value | Rationale |
+|----------|-------|-----------|
+| `FREQUENCY_BANDS` | {0, 300, 600, 1200, 2400, 5000} Hz | 5 bands covering bass through presence; ensures full-spectrum peak capture |
+| `PEAKS_PER_FRAME` | 5 | One per band approximately; balances density vs storage |
+| `PEAK_NEIGHBORHOOD_SIZE` | 20 bins | 2D local-max radius (~215 Hz in frequency); ensures peaks are well-separated |
+| `PEAK_MIN_AMPLITUDE` | 0.01 | 1% of global max; filters noise floor |
+
+### Fingerprint Generation
+| Constant | Value | Rationale |
+|----------|-------|-----------|
+| `TARGET_ZONE_SIZE` | 5 frames (~232ms) | Minimum time separation between anchor and target |
+| `FAN_OUT` | 15 | Max pairs per anchor; high density for robust matching |
+| `MAX_TIME_DELTA` | 200 frames (~9.3s) | Maximum time separation; limits search window |
+
+### Matching
+| Constant | Value | Rationale |
+|----------|-------|-----------|
+| `OFFSET_TOLERANCE` | 2 frames | Binning tolerance for time-alignment histogram |
+| `MIN_ALIGNED_MATCHES` | 3 | Minimum aligned fingerprints to consider a candidate |
+| `MIN_CONFIDENCE` | 5.0% | Minimum confidence to report a match |
+
+---
+
+## Known Limitations from Prototype (to fix in BeatLens)
+
+1. **Hash formula overflow** — Frequency bins >= 1024 overflow the 10-bit allocation. Quantize or mask properly.
+2. **No audio normalization** — Volume differences affect peak detection. Add per-frame or per-band normalization.
+3. **Confidence scoring is heuristic** — The formula was manually tuned. Consider calibrating with test data.
+4. **Single-threaded processing** — Use Java 21 virtual threads for concurrent indexing.
+
+---
+
+## Key Insights from the Original Shazam Paper
+
+Reference: Wang, A. "An Industrial-Strength Audio Search Algorithm" (ISMIR 2003)
+PDF: https://www.ee.columbia.edu/~dpwe/papers/Wang03-shazam.pdf
+
+1. **Peaks survive noise/distortion** better than raw spectral values
+2. **Pair-wise hashing** (two frequencies + time delta) is far more discriminative than single-frequency features
+3. **Time-coherence scoring** (histogram of offsets) is the key to eliminating false positives
+4. The original Shazam achieved ~98% accuracy in quiet environments, ~90% in noisy conditions
+
+---
+
+## Tech Stack
+
+| Layer | Technology | Version |
+|-------|-----------|---------|
+| **Language** | Java | 21 (LTS) |
+| **Backend Framework** | Spring Boot | 3.5.0 |
+| **Build Tool** | Maven | 3.9+ |
+| **Database** | PostgreSQL | 15+ |
+| **Caching** | Caffeine (via `spring-boot-starter-cache`) | Via Spring Boot |
+| **ORM** | Spring Data JPA / Hibernate | Via Spring Boot |
+| **Migrations** | Flyway | Via Spring Boot |
+| **FFT Library** | Apache Commons Math 3 (`FastFourierTransformer`) | 3.6.1 |
+| **Logging** | SLF4J + Logback | Via Spring Boot |
+| **Testing** | JUnit 5 + Mockito | Via Spring Boot Starter Test |
+| **Monitoring** | Spring Boot Actuator | Via Spring Boot |
+| **Frontend** | React 18 + TypeScript + Vite | Latest |
+| **Styling** | Tailwind CSS | Latest |
+| **Audio Capture** | Web Audio API | Browser-native |
+
+### Why Apache Commons Math FFT
+
+- **Correctness**: `FastFourierTransformer` is thoroughly tested and peer-reviewed
+- **Maintenance**: Zero FFT code to maintain
+- **Usage**: Apply Hann window, call `transform()`, extract magnitudes from `Complex[]`
+- **What stays custom**: Hann windowing, peak detection, constellation pairing, hash generation
+
+### Why PostgreSQL (not H2)
+
+- Production-grade RDBMS with proper concurrency, ACID compliance, and scalability
+- Excellent index performance on the `fingerprints.hash` column (B-tree) for millions of rows
+- Connection pooling via HikariCP (bundled with Spring Boot)
+- Easy to run locally via Docker: `docker run -e POSTGRES_DB=beatlens -e POSTGRES_USER=beatlens -e POSTGRES_PASSWORD=beatlens -p 5432:5432 postgres:17`
+
+### Why Caffeine Cache (not load-all-on-startup)
+
+- **Problem**: Loading all fingerprints into a HashMap on startup consumes O(songs * 290K) heap. At 1,000 songs this is ~290M entries = multiple GB.
+- **Solution**: Caffeine provides a bounded, LRU-evicting cache with lazy loading.
+- **Cache config** (in `application.yml`): `maximumSize=500000,expireAfterAccess=30m,recordStats`
+- **Two caches**:
+  - `fingerprint-lookup`: hash -> `List<FingerprintEntry>` (the hot path during matching)
+  - `song-metadata`: songId -> `Song` entity
+- **Invalidation**: `@CacheEvict` on song index/delete operations
+- **Observability**: Cache stats exposed via Actuator at `/actuator/caches` for hit/miss rate monitoring
+- **Scalability path**: If the app eventually needs distributed caching, Caffeine can be replaced with Redis as an L2 cache while keeping Caffeine as L1
+
+---
+
+## REST API
+
+```
+POST   /api/songs/upload          # Upload + index a song (multipart file)
+GET    /api/songs                  # List all indexed songs
+GET    /api/songs/{id}             # Get song details
+DELETE /api/songs/{id}             # Remove a song
+POST   /api/match                  # Match audio clip (multipart WAV/PCM)
+GET    /api/stats                  # Database statistics
+```
+
+## Database Schema (PostgreSQL, Flyway-managed)
+
+**songs**: id (BIGSERIAL PK), title, artist, file_path, duration_seconds, fingerprint_count, indexed_at
+**fingerprints**: id (BIGSERIAL PK), hash (BIGINT, B-tree indexed), song_id (FK -> songs ON DELETE CASCADE), time_offset (INT)
+
+---
+
+## Reference Documentation
+
+- Original prototype: `/Users/dhruvtri/Downloads/temp-shazam/src/`
+- `temp-shazam/src/INTUITION_GUIDE.md` — Deep-dive signal processing explanations
+- `temp-shazam/src/LEARNING_RESOURCES.md` — Papers, books, courses for audio fingerprinting
+- Shazam paper: https://www.ee.columbia.edu/~dpwe/papers/Wang03-shazam.pdf

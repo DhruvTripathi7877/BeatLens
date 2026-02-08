@@ -1,0 +1,71 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: beatlens
+
+  # ═══ PostgreSQL Database ═══
+  datasource:
+    url: jdbc:postgresql://localhost:5432/beatlens
+    driver-class-name: org.postgresql.Driver
+    username: beatlens
+    password: beatlens
+
+  jpa:
+    hibernate:
+      ddl-auto: validate  # Flyway manages schema; Hibernate only validates
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+
+  # ═══ Caffeine Cache ═══
+  cache:
+    type: caffeine
+    cache-names:
+      - fingerprint-lookup    # hash -> List<FingerprintEntry>
+      - song-metadata         # songId -> Song entity
+    caffeine:
+      spec: maximumSize=500000,expireAfterAccess=30m,recordStats
+
+# ═══ Audio Fingerprinting Constants ═══
+# These mirror AudioConstants.java defaults and can be overridden here.
+beatlens:
+  audio:
+    sample-rate: 44100
+    bits-per-sample: 16
+    channels: 1
+  spectrogram:
+    frame-size: 4096
+    hop-size: 2048
+  peak-detection:
+    frequency-bands: [0, 300, 600, 1200, 2400, 5000]
+    peaks-per-frame: 5
+    neighborhood-size: 20
+    min-amplitude: 0.01
+  fingerprint:
+    target-zone-size: 5
+    fan-out: 15
+    max-time-delta: 200
+  matching:
+    offset-tolerance: 2
+    min-aligned-matches: 3
+    min-confidence: 5.0
+
+# ═══ Actuator (includes cache metrics) ═══
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,caches
