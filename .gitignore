@@ -54,3 +54,4 @@ out/
 
 # === Maven wrapper (keep .mvn/wrapper but ignore downloaded jar) ===
 .mvn/wrapper/maven-wrapper.jar
+.cursor/
