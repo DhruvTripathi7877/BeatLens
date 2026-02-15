@@ -2,8 +2,13 @@
 # BeatLens — Docker Profile Overrides
 # ═══════════════════════════════════════════════════════════════
 # Activated via: SPRING_PROFILES_ACTIVE=docker
-# Overrides datasource and CORS for containerized deployment.
+# Overrides datasource, port, and CORS for containerized deployment.
+#
+# Railway sets PORT automatically. Docker Compose defaults to 8080.
 # ═══════════════════════════════════════════════════════════════
+
+server:
+  port: ${PORT:8080}
 
 spring:
   datasource:

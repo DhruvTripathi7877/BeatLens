@@ -174,65 +174,144 @@ Railway is the simplest way to deploy BeatLens with a public HTTPS URL. It suppo
 
 **Cost**: Free tier includes $5/month in credits (sufficient for hobby use).
 
+**How it works on Railway**: You create three separate services inside one Railway project — a managed PostgreSQL database, the backend (from `backend/Dockerfile`), and the frontend (from `frontend/Dockerfile`). The services talk to each other over Railway's private network (`*.railway.internal`). Railway assigns each service a dynamic `PORT` — our Dockerfiles already handle this via the `PORT` env var.
+
+```
+┌─ Railway Project ──────────────────────────────────────────────────┐
+│                                                                     │
+│  ┌─────────────┐   private network   ┌──────────────┐              │
+│  │  Frontend    │ ──────────────────> │   Backend    │              │
+│  │  (Nginx)     │  BACKEND_URL env    │ (Spring Boot)│              │
+│  │  public URL  │                     │  public URL  │              │
+│  └─────────────┘                      └──────┬───────┘              │
+│                                              │                      │
+│                                    ┌─────────▼────────┐             │
+│                                    │   PostgreSQL      │             │
+│                                    │  (Railway addon)  │             │
+│                                    └──────────────────┘             │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
 #### Step 1: Create a Railway Account
 
 1. Go to [railway.app](https://railway.app)
-2. Sign up with your GitHub account
+2. Sign up with your **GitHub account** (this links your repos automatically)
 
-#### Step 2: Create a New Project
+#### Step 2: Push Your Code to GitHub
 
-1. Click **"New Project"**
-2. Select **"Deploy from GitHub repo"**
-3. Authorize Railway to access your BeatLens repository
-4. Select the BeatLens repository
+Make sure all the latest changes are pushed:
 
-#### Step 3: Add PostgreSQL
+```bash
+git add .
+git commit -m "Add Docker and deployment configuration"
+git push origin main
+```
 
-1. In your Railway project, click **"+ New"**
+#### Step 3: Create a New Railway Project
+
+1. From the Railway dashboard, click **"New Project"**
+2. Select **"Empty Project"** (we'll add services one by one)
+3. Name it `beatlens`
+
+#### Step 4: Add PostgreSQL Database
+
+1. Inside the project, click **"+ New"** (top-right)
 2. Select **"Database" > "Add PostgreSQL"**
-3. Railway provisions a PostgreSQL instance automatically
-4. Note the connection variables (available in the Variables tab):
-   - `DATABASE_URL`, `PGUSER`, `PGPASSWORD`, `PGDATABASE`
+3. Railway provisions the database instantly
+4. Click the PostgreSQL service, go to the **"Variables"** tab
+5. You'll see auto-generated variables like:
+   - `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE`
+   - `DATABASE_URL` (full connection string)
+6. **Keep this tab open** — you'll reference these in the next steps
 
-#### Step 4: Deploy the Backend
+#### Step 5: Deploy the Backend
 
-1. In your Railway project, click **"+ New" > "GitHub Repo"**
-2. Select the same BeatLens repository
-3. In the service **Settings**:
-   - Set **Root Directory** to `backend`
-   - Set **Builder** to "Dockerfile"
-4. In the **Variables** tab, add:
+1. Click **"+ New" > "GitHub Repo"**
+2. Select your **BeatLens** repository
+3. Railway will auto-detect the repo. Now configure it:
 
+**Settings tab:**
+- **Service Name**: `backend`
+- **Root Directory**: `backend`
+- **Builder**: Dockerfile (Railway should auto-detect it)
+
+**Variables tab — add these one by one:**
+
+| Variable | Value |
+|----------|-------|
+| `SPRING_PROFILES_ACTIVE` | `docker` |
+| `DATABASE_URL` | `jdbc:postgresql://${{Postgres.RAILWAY_PRIVATE_DOMAIN}}:5432/${{Postgres.PGDATABASE}}` |
+| `DATABASE_USERNAME` | `${{Postgres.PGUSER}}` |
+| `DATABASE_PASSWORD` | `${{Postgres.PGPASSWORD}}` |
+| `BEATLENS_CORS_ALLOWED_ORIGINS` | `https://<will-update-after-step-6>` |
+
+> The `${{Postgres.XXX}}` syntax is Railway's variable referencing — it pulls values from the PostgreSQL service automatically. Replace `Postgres` with whatever Railway named your database service (visible in the project canvas).
+
+**Networking tab:**
+- Click **"Generate Domain"** — this gives the backend a public HTTPS URL
+- Also enable **"Private Networking"** — this allows the frontend to reach the backend internally
+
+4. Click **"Deploy"** and wait for the build to complete (~3-5 min first time)
+5. Verify: visit `https://<your-backend-domain>.up.railway.app/actuator/health` — should return `{"status":"UP"}`
+
+#### Step 6: Deploy the Frontend
+
+1. Click **"+ New" > "GitHub Repo"**
+2. Select the **same BeatLens repository** again
+
+**Settings tab:**
+- **Service Name**: `frontend`
+- **Root Directory**: `frontend`
+- **Builder**: Dockerfile
+
+**Variables tab — add these:**
+
+| Variable | Value |
+|----------|-------|
+| `BACKEND_URL` | `http://${{backend.RAILWAY_PRIVATE_DOMAIN}}:${{backend.PORT}}` |
+
+> This tells nginx to proxy `/api/*` requests to the backend over Railway's private network. No public internet roundtrip.
+
+**Networking tab:**
+- Click **"Generate Domain"** — this is your app's public URL
+
+4. Click **"Deploy"**
+
+#### Step 7: Update Backend CORS
+
+Now that you know the frontend's public URL:
+
+1. Go back to the **backend** service > **Variables** tab
+2. Update `BEATLENS_CORS_ALLOWED_ORIGINS` to the frontend's actual URL:
    ```
-   SPRING_PROFILES_ACTIVE=docker
-   DATABASE_URL=jdbc:postgresql://${{Postgres.RAILWAY_PRIVATE_DOMAIN}}:5432/${{Postgres.PGDATABASE}}
-   DATABASE_USERNAME=${{Postgres.PGUSER}}
-   DATABASE_PASSWORD=${{Postgres.PGPASSWORD}}
-   BEATLENS_CORS_ALLOWED_ORIGINS=https://your-frontend.up.railway.app
+   https://beatlens-frontend-production.up.railway.app
    ```
+   (Replace with your actual Railway-assigned frontend domain)
+3. The backend will automatically redeploy with the new variable
 
-5. In **Settings > Networking**, click **"Generate Domain"** to get a public URL
+#### Step 8: Verify Everything
 
-#### Step 5: Deploy the Frontend
+1. Open your **frontend URL** in a browser — you should see the BeatLens UI
+2. Check the **Stats** section loads (confirms backend + database connectivity)
+3. Upload a WAV file — confirms file upload and fingerprinting work
+4. Record and match audio — confirms the full pipeline
 
-1. Click **"+ New" > "GitHub Repo"** again
-2. Select the BeatLens repository
-3. In the service **Settings**:
-   - Set **Root Directory** to `frontend`
-   - Set **Builder** to "Dockerfile"
-4. In **Settings > Networking**, click **"Generate Domain"**
-5. Update the `nginx.conf` proxy target:
-   - In Railway, the frontend Nginx needs to know the backend's internal URL
-   - Set an environment variable: `BACKEND_URL=http://backend.railway.internal:8080`
-   - Or use Railway's private networking with service discovery
+#### Troubleshooting Railway
 
-#### Step 6: Update CORS
+**Build fails with "VOLUME keyword is banned":**
+- Make sure you're using the latest Dockerfile (uses `alpine:3.21` + `apk add nginx`, not `nginx:1.27-alpine`)
 
-Go back to the backend service Variables and update `BEATLENS_CORS_ALLOWED_ORIGINS` with the actual frontend URL that Railway assigned (e.g., `https://beatlens-frontend-production.up.railway.app`).
+**Frontend shows "502 Bad Gateway" on /api calls:**
+- Check that the backend service has **Private Networking** enabled
+- Verify `BACKEND_URL` on the frontend service uses `${{backend.RAILWAY_PRIVATE_DOMAIN}}` (not a hardcoded URL)
+- Check the backend's deploy logs to confirm it started successfully
 
-#### Step 7: Verify
+**Backend can't connect to database:**
+- Verify the `DATABASE_URL` variable uses `${{Postgres.RAILWAY_PRIVATE_DOMAIN}}` (private, not public host)
+- Check the Postgres service name matches what you used in the `${{...}}` references
 
-Visit your frontend URL. You should see the BeatLens UI. Test uploading a song and matching audio.
+**"Address already in use" error:**
+- Don't set `PORT` manually — Railway sets it automatically
 
 ---
 

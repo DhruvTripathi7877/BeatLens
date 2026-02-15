@@ -28,11 +28,9 @@ COPY --from=build /app/target/*.jar app.jar
 # Switch to non-root user
 USER beatlens
 
-EXPOSE 8080
-
-# Health check via Spring Actuator
-HEALTHCHECK --interval=15s --timeout=5s --start-period=40s --retries=3 \
-  CMD wget -qO- http://localhost:8080/actuator/health || exit 1
+# Default port (Railway overrides via PORT env var)
+ENV PORT=8080
+EXPOSE ${PORT}
 
 ENTRYPOINT ["java", \
   "-XX:+UseContainerSupport", \
