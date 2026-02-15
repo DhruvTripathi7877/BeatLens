@@ -59,3 +59,4 @@ out/
 # === Documentation / Markdown ===
 *.md
 docs/
+wav-files/
