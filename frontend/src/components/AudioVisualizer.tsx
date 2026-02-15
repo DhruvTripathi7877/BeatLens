@@ -157,7 +157,7 @@ export default function AudioVisualizer({
     <canvas
       ref={canvasRef}
       style={{ width: size, height: size }}
-      className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+      className="absolute inset-0 pointer-events-none"
     />
   );
 }

@@ -44,7 +44,7 @@ export default function AudioRecorder({ onMatchResult }: Props) {
   return (
     <div className="flex flex-col items-center gap-8">
       {/* ── Visualizer + Button container ─────────────────────── */}
-      <div className="relative" style={{ width: 280, height: 280 }}>
+      <div className="relative flex items-center justify-center" style={{ width: 280, height: 280 }}>
         {/* Canvas visualizer (drawn behind/around the button) */}
         <AudioVisualizer
           analyserNode={state.analyserNode}
@@ -57,7 +57,7 @@ export default function AudioRecorder({ onMatchResult }: Props) {
         <button
           onClick={handleToggle}
           disabled={matching}
-          className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
+          className={`relative z-10
             w-40 h-40 rounded-full transition-all duration-300
             focus:outline-none focus:ring-4 focus:ring-cyan-400/30 ${
               matching
