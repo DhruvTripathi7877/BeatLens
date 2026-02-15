@@ -7,6 +7,8 @@ export interface AudioRecorderState {
   duration: number;
   /** Any error that occurred. */
   error: string | null;
+  /** AnalyserNode for real-time audio visualization (available only while recording). */
+  analyserNode: AnalyserNode | null;
 }
 
 export interface AudioRecorderActions {
@@ -19,14 +21,19 @@ export interface AudioRecorderActions {
 /**
  * Hook that wraps the Web Audio API to record microphone input and
  * produce a WAV Blob for upload to the backend.
+ *
+ * Also creates an AnalyserNode that can drive a real-time audio
+ * visualizer while recording is active.
  */
 export function useAudioRecorder(): [AudioRecorderState, AudioRecorderActions] {
   const [isRecording, setIsRecording] = useState(false);
   const [duration, setDuration] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [analyserNode, setAnalyserNode] = useState<AnalyserNode | null>(null);
 
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef(0);
@@ -53,6 +60,20 @@ export function useAudioRecorder(): [AudioRecorderState, AudioRecorderActions] {
       mediaStreamRef.current = stream;
       chunksRef.current = [];
 
+      // ── Audio analyser for real-time visualization ──────────────
+      // The AnalyserNode taps the live mic stream without affecting
+      // the MediaRecorder path. It provides frequency-domain data
+      // that the AudioVisualizer canvas reads each animation frame.
+      const audioCtx = new AudioContext({ sampleRate: 44100 });
+      const source = audioCtx.createMediaStreamSource(stream);
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;              // 128 frequency bins – plenty for visualization
+      analyser.smoothingTimeConstant = 0.8; // smooth transitions between frames
+      source.connect(analyser);
+      audioContextRef.current = audioCtx;
+      setAnalyserNode(analyser);
+
+      // ── MediaRecorder for audio capture ────────────────────────
       const preferredMime = 'audio/webm;codecs=opus';
       const fallbackMime = 'audio/webm';
       const mimeType = MediaRecorder.isTypeSupported(preferredMime) ? preferredMime : fallbackMime;
@@ -69,6 +90,13 @@ export function useAudioRecorder(): [AudioRecorderState, AudioRecorderActions] {
           clearInterval(timerRef.current);
           timerRef.current = null;
         }
+
+        // Clean up audio analyser context
+        if (audioContextRef.current) {
+          await audioContextRef.current.close().catch(() => {});
+          audioContextRef.current = null;
+        }
+        setAnalyserNode(null);
 
         // Convert to WAV via AudioContext
         const webmBlob = new Blob(chunksRef.current, { type: 'audio/webm' });
@@ -115,10 +143,14 @@ export function useAudioRecorder(): [AudioRecorderState, AudioRecorderActions] {
   }, []);
 
   return [
-    { isRecording, duration, error },
+    { isRecording, duration, error, analyserNode },
     { startRecording, stopRecording },
   ];
 }
+
+// ─────────────────────────────────────────────────────────────────
+// WAV encoding utilities
+// ─────────────────────────────────────────────────────────────────
 
 /**
  * Convert a WebM audio blob to a WAV blob via the Web Audio API.
