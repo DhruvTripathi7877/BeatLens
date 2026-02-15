@@ -57,6 +57,9 @@ out/
 .cursor/
 
 # === Documentation / Markdown ===
-*.md
+# *.md — Uncomment to ignore markdown files
 docs/
 wav-files/
+
+# === Docker (keep .env.example, ignore actual .env) ===
+# .env is already covered by Node/Frontend section above

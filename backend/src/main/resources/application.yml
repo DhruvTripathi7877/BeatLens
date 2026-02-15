@@ -7,10 +7,10 @@ spring:
 
   # ═══ PostgreSQL Database ═══
   datasource:
-    url: jdbc:postgresql://localhost:5432/beatlens
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/beatlens}
     driver-class-name: org.postgresql.Driver
-    username: postgres
-    password: postgres
+    username: ${DATABASE_USERNAME:postgres}
+    password: ${DATABASE_PASSWORD:postgres}
 
   jpa:
     hibernate:
@@ -42,6 +42,9 @@ spring:
 # ═══ Audio Fingerprinting Constants ═══
 # These mirror AudioConstants.java defaults and can be overridden here.
 beatlens:
+  # ═══ CORS (defaults for local dev; override in docker profile or via env) ═══
+  cors:
+    allowed-origins: http://localhost:3000,http://localhost:5173
   audio:
     sample-rate: 44100
     bits-per-sample: 16
