@@ -45,7 +45,9 @@ class PeakDetectorTest {
 
     @Test
     void detectPeaks_fromRealSineWave() {
-        // Generate a 440 Hz sine wave
+        // Generate a 440 Hz sine wave and run it through the full pipeline.
+        // Without spectral whitening, log-magnitude preserves peak positions
+        // (log is monotonic), so 440 Hz is still the dominant peak.
         int sampleRate = AudioConstants.SAMPLE_RATE;
         double[] samples = new double[sampleRate]; // 1 second
         for (int i = 0; i < samples.length; i++) {
@@ -56,9 +58,9 @@ class PeakDetectorTest {
         double[][] spectrogram = gen.generateSpectrogram(samples);
 
         List<PeakDetector.Peak> peaks = detector.detectPeaks(spectrogram);
-        assertFalse(peaks.isEmpty(), "Should detect peaks in a pure sine wave");
+        assertFalse(peaks.isEmpty(), "Should detect peaks in a sine wave");
 
-        // All peaks should be near 440 Hz bin (~41)
+        // There should be a peak near 440 Hz bin (~41)
         int expectedBin = AudioConstants.frequencyToBin(440);
         boolean hasNear440 = peaks.stream()
                 .anyMatch(p -> Math.abs(p.frequencyBin - expectedBin) <= 2);

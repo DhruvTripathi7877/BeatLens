@@ -13,12 +13,14 @@ import java.util.List;
  * the anchor's time position for later time-alignment matching.</p>
  *
  * <h3>Hash formula</h3>
- * <pre>hash = (freq1 &amp; 0x3FF) &lt;&lt; 20 | (freq2 &amp; 0x3FF) &lt;&lt; 10 | (timeDelta &amp; 0x3FF)</pre>
- * <p>Frequency bins and time deltas are masked to 10 bits (0-1023) to prevent overflow.</p>
+ * <pre>hash = (freq1 &amp; 0xFFF) &lt;&lt; 22 | (freq2 &amp; 0xFFF) &lt;&lt; 10 | (timeDelta &amp; 0x3FF)</pre>
+ * <p>Frequency bins use 12 bits (0-4095) and time deltas use 10 bits (0-1023).</p>
  */
 public class FingerprintGenerator {
 
     private static final Logger log = LoggerFactory.getLogger(FingerprintGenerator.class);
+    private static final int FREQ_MASK = 0xFFF;      // 12 bits
+    private static final int TIME_DELTA_MASK = 0x3FF; // 10 bits
 
     private final int targetZoneSize;
     private final int fanOut;
@@ -37,10 +39,11 @@ public class FingerprintGenerator {
             this.freq2 = freq2;
             this.timeDelta = timeDelta;
             this.anchorTime = anchorTime;
-            // Mask to 10 bits each to prevent overflow in the 30-bit hash
-            this.hash = ((long) (freq1 & 0x3FF) << 20)
-                      | ((long) (freq2 & 0x3FF) << 10)
-                      | (timeDelta & 0x3FF);
+            // Use 12 bits per frequency bin so full-spectrum bins (up to 2047 for
+            // frameSize=4096) are encoded without modulo wraparound.
+            this.hash = ((long) (freq1 & FREQ_MASK) << 22)
+                      | ((long) (freq2 & FREQ_MASK) << 10)
+                      | (timeDelta & TIME_DELTA_MASK);
         }
     }
 

@@ -40,17 +40,17 @@ class FingerprintGeneratorTest {
     }
 
     @Test
-    void hashFormula_masksTo10Bits() {
-        // Test with large frequency bin values (>1023) to verify masking
+    void hashFormula_encodes12BitFrequenciesAnd10BitTimeDelta() {
+        // Test with frequency bins >1023 to verify no modulo wrap for current FFT bins.
         FingerprintGenerator.Fingerprint fp = new FingerprintGenerator.Fingerprint(
                 2000, 1500, 100, 0);
 
-        // freq1 masked: 2000 & 0x3FF = 2000 - 1024 = 976
-        // freq2 masked: 1500 & 0x3FF = 1500 - 1024 = 476
-        // timeDelta masked: 100 & 0x3FF = 100
-        long expected = ((long) (2000 & 0x3FF) << 20) | ((long) (1500 & 0x3FF) << 10) | (100 & 0x3FF);
+        // freq1/freq2 use 12-bit fields, timeDelta uses 10 bits.
+        long expected = ((long) (2000 & 0xFFF) << 22)
+                | ((long) (1500 & 0xFFF) << 10)
+                | (100 & 0x3FF);
         assertEquals(expected, fp.hash);
-        assertTrue(fp.hash >= 0, "Hash should fit in 30 bits");
+        assertTrue(fp.hash >= 0, "Hash should be non-negative");
     }
 
     @Test

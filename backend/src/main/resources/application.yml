@@ -9,8 +9,8 @@ spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/beatlens
     driver-class-name: org.postgresql.Driver
-    username: beatlens
-    password: beatlens
+    username: postgres
+    password: postgres
 
   jpa:
     hibernate:
@@ -50,16 +50,16 @@ beatlens:
     frame-size: 4096
     hop-size: 2048
   peak-detection:
-    frequency-bands: [0, 300, 600, 1200, 2400, 5000]
-    peaks-per-frame: 5
-    neighborhood-size: 20
+    frequency-bands: [0, 300, 600, 1200, 2400, 5000, 10000, 22050]
+    peaks-per-frame: 8
+    neighborhood-size: 15
     min-amplitude: 0.01
   fingerprint:
     target-zone-size: 5
-    fan-out: 15
+    fan-out: 20
     max-time-delta: 200
   matching:
-    offset-tolerance: 2
+    offset-tolerance: 3
     min-aligned-matches: 3
     min-confidence: 5.0
 

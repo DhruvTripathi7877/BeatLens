@@ -42,9 +42,9 @@ public class AudioProperties {
     }
 
     public static class PeakDetection {
-        private int[] frequencyBands = {0, 300, 600, 1200, 2400, 5000};
-        private int peaksPerFrame = 5;
-        private int neighborhoodSize = 20;
+        private int[] frequencyBands = {0, 300, 600, 1200, 2400, 5000, 10000, 22050};
+        private int peaksPerFrame = 8;
+        private int neighborhoodSize = 15;
         private double minAmplitude = 0.01;
 
         public int[] getFrequencyBands() { return frequencyBands; }
@@ -59,7 +59,7 @@ public class AudioProperties {
 
     public static class Fingerprint {
         private int targetZoneSize = 5;
-        private int fanOut = 15;
+        private int fanOut = 20;
         private int maxTimeDelta = 200;
 
         public int getTargetZoneSize() { return targetZoneSize; }
@@ -71,7 +71,7 @@ public class AudioProperties {
     }
 
     public static class Matching {
-        private int offsetTolerance = 2;
+        private int offsetTolerance = 3;
         private int minAlignedMatches = 3;
         private double minConfidence = 5.0;
 

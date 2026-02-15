@@ -10,7 +10,28 @@ import org.slf4j.LoggerFactory;
 /**
  * Converts raw audio samples into a spectrogram (time-frequency magnitude matrix).
  *
- * <p>Pipeline: framing → Hann windowing → FFT (Apache Commons Math) → magnitude extraction.</p>
+ * <p>Pipeline: framing → Hann windowing → FFT (Apache Commons Math) →
+ * log-magnitude extraction.</p>
+ *
+ * <h3>Robustness techniques</h3>
+ * <ul>
+ *   <li><b>Log-magnitude</b>: Compresses dynamic range so quiet sections
+ *       (e.g. song tail / fade-out) produce magnitudes comparable to loud sections.
+ *       Without this, a global-max threshold during indexing of a full song
+ *       suppresses peaks in quiet regions, causing those sections to be
+ *       unrecognisable when queried in isolation.</li>
+ * </ul>
+ *
+ * <h3>Why no spectral whitening?</h3>
+ * <p>An earlier version subtracted the per-frequency-bin temporal mean to flatten
+ * the spectral envelope. This was <b>removed</b> because the mean depends on the
+ * <em>entire clip being processed</em>. During indexing the mean is computed across
+ * the full 3-minute song, while during matching it is computed across a short query
+ * clip — producing completely different values and therefore different peaks and
+ * hashes. The log-magnitude plus the local-maximum neighbourhood check in
+ * {@link PeakDetector} already handle spectral envelope differences robustly:
+ * log compresses multiplicative coloring to a small additive shift, and the
+ * local-max check is invariant to shifts that affect all neighbours equally.</p>
  */
 public class SpectrogramGenerator {
 
@@ -38,10 +59,10 @@ public class SpectrogramGenerator {
     // ═══ Main public method ═══
 
     /**
-     * Generate a magnitude spectrogram.
+     * Generate a log-magnitude spectrogram.
      *
      * @param samples normalised audio samples [-1.0, 1.0]
-     * @return {@code double[numFrames][frameSize/2]} magnitude values
+     * @return {@code double[numFrames][frameSize/2]} — log-magnitude values
      */
     public double[][] generateSpectrogram(double[] samples) {
         int numFrames = calculateNumFrames(samples.length);
@@ -58,7 +79,8 @@ public class SpectrogramGenerator {
             spectrogram[frame] = computeFFTMagnitude(windowed);
         }
 
-        log.debug("Generated spectrogram: {} frames x {} bins", numFrames, frameSize / 2);
+        log.debug("Generated spectrogram: {} frames x {} bins (log-magnitude)",
+                numFrames, frameSize / 2);
         return spectrogram;
     }
 
@@ -95,7 +117,12 @@ public class SpectrogramGenerator {
         Complex[] spectrum = fft.transform(windowed, TransformType.FORWARD);
         double[] magnitudes = new double[frameSize / 2];
         for (int i = 0; i < magnitudes.length; i++) {
-            magnitudes[i] = spectrum[i].abs(); // sqrt(re^2 + im^2)
+            // Log-magnitude: log(1 + |X|) compresses dynamic range.
+            // A loud section (mag ~50000) maps to ~10.8 while a quiet section
+            // (mag ~500) maps to ~6.2 — a 100:1 ratio becomes ~1.7:1.
+            // This ensures quiet regions (song tails, fade-outs) still produce
+            // meaningful peaks during both indexing and query.
+            magnitudes[i] = Math.log1p(spectrum[i].abs());
         }
         return magnitudes;
     }

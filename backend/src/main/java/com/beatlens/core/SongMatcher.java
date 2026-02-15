@@ -115,25 +115,45 @@ public class SongMatcher {
         int totalMatches = 0;
     }
 
+    private static class MatchCollectionStats {
+        int queryFingerprints = 0;
+        int lookupHits = 0;
+        int totalDatabaseEntries = 0;
+        int candidateSongs = 0;
+    }
+
     private Map<Long, SongMatchData> collectMatches(
             List<FingerprintGenerator.Fingerprint> queryFingerprints,
             FingerprintLookup lookup) {
 
         Map<Long, SongMatchData> songMatches = new HashMap<>();
+        MatchCollectionStats stats = new MatchCollectionStats();
+        stats.queryFingerprints = queryFingerprints.size();
 
         for (FingerprintGenerator.Fingerprint qfp : queryFingerprints) {
             List<FingerprintEntry> entries = lookup.lookup(qfp.hash);
             if (entries == null) continue;
+            if (!entries.isEmpty()) {
+                stats.lookupHits++;
+                stats.totalDatabaseEntries += entries.size();
+            }
 
             for (FingerprintEntry entry : entries) {
                 SongMatchData data = songMatches.computeIfAbsent(
                         entry.songId, k -> new SongMatchData());
                 int offset = entry.timeOffset - qfp.anchorTime;
-                int binned = (offset / offsetTolerance) * offsetTolerance;
+                // Use floorDiv so negative offsets bin symmetrically
+                // (Java's / operator rounds toward zero, splitting negative
+                // bins unevenly and scattering votes that should cluster).
+                int binned = Math.floorDiv(offset, offsetTolerance) * offsetTolerance;
                 data.offsetHistogram.merge(binned, 1, Integer::sum);
                 data.totalMatches++;
             }
         }
+
+        stats.candidateSongs = songMatches.size();
+        log.info("Hash lookup stats: queryFingerprints={}, hashesWithMatches={}, dbEntryHits={}, candidateSongs={}",
+                stats.queryFingerprints, stats.lookupHits, stats.totalDatabaseEntries, stats.candidateSongs);
 
         return songMatches;
     }

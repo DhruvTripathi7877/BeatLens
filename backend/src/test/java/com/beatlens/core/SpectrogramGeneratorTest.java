@@ -9,10 +9,12 @@ class SpectrogramGeneratorTest {
 
     @Test
     void generateSpectrogram_withSineWave_producesPeakAtCorrectBin() {
-        // Generate a 1000 Hz sine wave, 1 second
+        // Generate a 1000 Hz sine wave, 1 second.
+        // Log-magnitude preserves peak positions (log is monotonic),
+        // so the highest-magnitude bin is still at ~1000 Hz.
         int sampleRate = AudioConstants.SAMPLE_RATE;
         double freq = 1000.0;
-        double[] samples = new double[sampleRate]; // 1 second
+        double[] samples = new double[sampleRate];
 
         for (int i = 0; i < samples.length; i++) {
             samples[i] = Math.sin(2 * Math.PI * freq * i / sampleRate);

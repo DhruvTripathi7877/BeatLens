@@ -37,11 +37,26 @@ export function useAudioRecorder(): [AudioRecorderState, AudioRecorderActions] {
     setDuration(0);
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Disable browser voice-processing features that can suppress music.
+      // Echo cancellation / noise suppression / AGC are useful for calls, but
+      // they distort or remove speaker-played songs (e.g. YouTube capture).
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          sampleRate: 44100,
+          sampleSize: 16,
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+        },
+      });
       mediaStreamRef.current = stream;
       chunksRef.current = [];
 
-      const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      const preferredMime = 'audio/webm;codecs=opus';
+      const fallbackMime = 'audio/webm';
+      const mimeType = MediaRecorder.isTypeSupported(preferredMime) ? preferredMime : fallbackMime;
+      const recorder = new MediaRecorder(stream, { mimeType });
       mediaRecorderRef.current = recorder;
 
       recorder.ondataavailable = (e) => {
@@ -61,8 +76,9 @@ export function useAudioRecorder(): [AudioRecorderState, AudioRecorderActions] {
           const wavBlob = await webmToWav(webmBlob);
           resolveRef.current?.(wavBlob);
         } catch {
-          // If WAV conversion fails, fall back to webm
-          resolveRef.current?.(webmBlob);
+          // Keep client errors generic and avoid sending mislabeled formats.
+          setError('Failed to process recorded audio. Please try again.');
+          resolveRef.current?.(null);
         }
       };
 
