@@ -22,7 +22,7 @@ RUN npm run build
 # ── Stage 2: Serve with Nginx (Railway-compatible — no VOLUME) ──
 FROM alpine:3.21
 
-RUN apk add --no-cache nginx gettext && \
+RUN apk add --no-cache nginx gettext ca-certificates && \
     mkdir -p /run/nginx /var/cache/nginx /var/log/nginx
 
 # Defaults work for Docker Compose; Railway overrides via env vars
