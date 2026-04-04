@@ -48,21 +48,22 @@ public class IndexingService {
     }
 
     /**
-     * Index a song from raw WAV bytes.
+     * Index a song from raw audio bytes.
+     * FFmpeg handles format detection — WAV, MP3, FLAC, OGG, AAC, M4A, etc.
      *
-     * @param title    song title
-     * @param artist   artist name (nullable)
-     * @param wavBytes raw WAV file bytes
+     * @param title      song title
+     * @param artist     artist name (nullable)
+     * @param audioBytes raw bytes of any supported audio format
      * @return the persisted Song entity
      */
     @Transactional
-    public Song indexSong(String title, String artist, byte[] wavBytes) {
+    public Song indexSong(String title, String artist, byte[] audioBytes) {
         log.info("Indexing song: {} - {}", title, artist);
 
         // 1. Decode audio
         double[] samples;
         try {
-            samples = audioProcessor.readBytes(wavBytes);
+            samples = audioProcessor.readBytes(audioBytes);
         } catch (Exception e) {
             throw new AudioProcessingException("Failed to decode audio file: " + e.getMessage(), e);
         }

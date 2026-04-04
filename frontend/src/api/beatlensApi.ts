@@ -31,6 +31,12 @@ export async function listSongs(): Promise<Song[]> {
   return handleResponse<Song[]>(res);
 }
 
+/** Get N random songs from the library. */
+export async function getRandomSongs(limit = 5): Promise<Song[]> {
+  const res = await fetch(`${BASE}/songs/random?limit=${limit}`);
+  return handleResponse<Song[]>(res);
+}
+
 /** Get a single song by ID. */
 export async function getSong(id: number): Promise<Song> {
   const res = await fetch(`${BASE}/songs/${id}`);
@@ -46,14 +52,10 @@ export async function deleteSong(id: number): Promise<void> {
   }
 }
 
-/** Match an audio blob against the database. */
-export async function matchAudio(
-  blob: Blob,
-  format: 'wav' | 'pcm' = 'wav',
-): Promise<MatchResponse> {
+/** Match an audio blob against the database. Accepts any format (WebM, WAV, MP3, etc.). */
+export async function matchAudio(blob: Blob): Promise<MatchResponse> {
   const form = new FormData();
-  form.append('file', blob, format === 'wav' ? 'query.wav' : 'query.pcm');
-  form.append('format', format);
+  form.append('file', blob, 'query.audio');
 
   const res = await fetch(`${BASE}/match`, { method: 'POST', body: form });
   return handleResponse<MatchResponse>(res);

@@ -40,6 +40,16 @@ public class SongService {
                 .toList();
     }
 
+    public List<SongDto> getRandomSongs(int limit) {
+        long count = songRepository.count();
+        if (count == 0) return List.of();
+        long maxOffset = Math.max(0, count - limit);
+        long offset = (long) (Math.random() * (maxOffset + 1));
+        return songRepository.findWithOffset(offset, limit).stream()
+                .map(SongDto::from)
+                .toList();
+    }
+
     public SongDto getSong(Long id) {
         Song song = songRepository.findById(id)
                 .orElseThrow(() -> new SongNotFoundException(id));

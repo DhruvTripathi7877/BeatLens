@@ -26,24 +26,16 @@ public class MatchController {
     /**
      * Match an audio clip against the indexed database.
      *
-     * Accepts a WAV or raw PCM file. The "format" parameter selects
-     * decoding: "wav" (default) or "pcm".
+     * Accepts any audio format that FFmpeg supports: WAV, MP3, FLAC, OGG,
+     * WebM/Opus, AAC, M4A, etc. Format is detected automatically.
      */
     @PostMapping(value = "/match", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<MatchResponse> match(
-            @RequestParam("file") MultipartFile file,
-            @RequestParam(value = "format", defaultValue = "wav") String format) throws IOException {
+            @RequestParam("file") MultipartFile file) throws IOException {
 
-        log.info("Match request: size={}, format={}", file.getSize(), format);
+        log.info("Match request: size={}, contentType={}", file.getSize(), file.getContentType());
 
-        byte[] bytes = file.getBytes();
-        MatchResponse response;
-
-        if ("pcm".equalsIgnoreCase(format)) {
-            response = matchService.matchPcm(bytes);
-        } else {
-            response = matchService.matchWav(bytes);
-        }
+        MatchResponse response = matchService.match(file.getBytes());
 
         log.info("Match completed: {} results", response.results().size());
         return ResponseEntity.ok(response);

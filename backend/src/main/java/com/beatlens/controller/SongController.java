@@ -54,6 +54,15 @@ public class SongController {
     }
 
     /**
+     * Return N random songs from the library.
+     */
+    @GetMapping("/random")
+    public ResponseEntity<List<SongDto>> randomSongs(
+            @RequestParam(value = "limit", defaultValue = "5") int limit) {
+        return ResponseEntity.ok(songService.getRandomSongs(Math.min(limit, 20)));
+    }
+
+    /**
      * Get a single song by ID.
      */
     @GetMapping("/{id}")

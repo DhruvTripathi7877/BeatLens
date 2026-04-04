@@ -101,7 +101,7 @@ public class SongMatcher {
 
         // Step 3: score each candidate
         List<MatchResult> results = scoreMatches(songMatches, queryFingerprints.size());
-        Collections.sort(results);
+        Collections.sort(results); //TODO: how is the sort happening here. on which field?
 
         log.debug("Matched {} query fingerprints → {} candidates",
                 queryFingerprints.size(), results.size());

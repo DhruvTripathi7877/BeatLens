@@ -12,12 +12,8 @@ import org.springframework.context.annotation.Configuration;
 public class CoreBeanConfig {
 
     @Bean
-    public AudioProcessor audioProcessor(AudioProperties props) {
-        return new AudioProcessor(
-                props.getAudio().getSampleRate(),
-                props.getAudio().getBitsPerSample(),
-                props.getAudio().getChannels()
-        );
+    public AudioProcessor audioProcessor() {
+        return new AudioProcessor();
     }
 
     @Bean

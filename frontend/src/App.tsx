@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import AudioRecorder from './components/AudioRecorder';
+import LibraryGlance from './components/LibraryGlance';
 import MatchResults from './components/MatchResults';
 import SongLibrary from './components/SongLibrary';
 import SongUpload from './components/SongUpload';
@@ -18,86 +19,45 @@ function App() {
   }, []);
 
   const handleUploaded = useCallback(() => {
-    // Force SongLibrary to re-fetch on next render
     setLibraryKey((k) => k + 1);
   }, []);
 
-  const tabs: { id: Tab; label: string; icon: JSX.Element }[] = [
-    {
-      id: 'listen',
-      label: 'Listen',
-      icon: (
-        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-          <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
-          <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
-        </svg>
-      ),
-    },
-    {
-      id: 'library',
-      label: 'Library',
-      icon: (
-        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-          <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
-        </svg>
-      ),
-    },
-    {
-      id: 'upload',
-      label: 'Upload',
-      icon: (
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-          />
-        </svg>
-      ),
-    },
+  const tabs: { id: Tab; label: string }[] = [
+    { id: 'listen', label: 'LISTEN' },
+    { id: 'library', label: 'LIBRARY' },
+    { id: 'upload', label: 'UPLOAD' },
   ];
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white flex flex-col">
-      {/* ── Gradient accent line at the very top ──────────────── */}
-      <div className="h-[2px] bg-gradient-to-r from-transparent via-cyan-500 to-transparent" />
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-mono">
 
       {/* ── Header ────────────────────────────────────────────── */}
-      <header className="border-b border-white/[0.06] bg-white/[0.02] backdrop-blur-lg sticky top-0 z-30">
+      <header className="border-b border-white/10 bg-zinc-950 sticky top-0 z-30">
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
-          {/* Logo + title */}
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-gradient-to-br from-cyan-500 to-teal-600 rounded-xl flex items-center justify-center shadow-lg shadow-cyan-500/20">
-              <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
-              </svg>
-            </div>
-            <div>
-              <h1 className="text-lg font-bold tracking-tight">BeatLens</h1>
-              <p className="text-[11px] text-gray-500 -mt-0.5 hidden sm:block">Audio Fingerprinting</p>
-            </div>
+          {/* Logo */}
+          <div className="flex items-center">
+            <span className="font-mono font-bold text-sm text-green-400">[ BEATLENS ]</span>
+            <span className="font-mono text-xs text-zinc-600 ml-3 hidden sm:inline">// audio fingerprinting</span>
           </div>
 
-          {/* Stats in header */}
+          {/* Stats */}
           <StatsBar />
         </div>
 
-        {/* ── Tab bar ──────────────────────────────────────────── */}
+        {/* ── Tab bar ───────────────────────────────────────────── */}
         <nav className="max-w-5xl mx-auto px-6">
-          <div className="flex gap-1">
+          <div className="flex">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg transition-all duration-200 ${
+                className={`font-mono text-xs py-2 px-4 border-b transition-colors duration-150 ${
                   activeTab === tab.id
-                    ? 'bg-white/[0.06] text-white border-b-2 border-cyan-500'
-                    : 'text-gray-500 hover:text-gray-300 hover:bg-white/[0.03] border-b-2 border-transparent'
+                    ? 'text-green-400 border-green-400'
+                    : 'text-zinc-500 hover:text-zinc-300 border-transparent'
                 }`}
               >
-                {tab.icon}
-                {tab.label}
+                {activeTab === tab.id ? `> ${tab.label}` : tab.label}
               </button>
             ))}
           </div>
@@ -110,6 +70,7 @@ function App() {
           {activeTab === 'listen' && (
             <div className="flex flex-col items-center pt-4 animate-fade-in">
               <AudioRecorder onMatchResult={handleMatchResult} />
+              {!matchResult && <LibraryGlance />}
               <MatchResults response={matchResult} />
             </div>
           )}
@@ -129,10 +90,10 @@ function App() {
       </main>
 
       {/* ── Footer ────────────────────────────────────────────── */}
-      <footer className="border-t border-white/[0.04] px-6 py-4">
-        <div className="max-w-5xl mx-auto flex items-center justify-between text-xs text-gray-600">
-          <span>BeatLens &mdash; Audio Fingerprinting &amp; Recognition</span>
-          <span className="hidden sm:inline">Built with Spring Boot + React</span>
+      <footer className="border-t border-white/10 px-6 py-4">
+        <div className="max-w-5xl mx-auto flex items-center justify-between font-mono text-xs text-zinc-700">
+          <span>BeatLens // audio fingerprinting</span>
+          <span className="hidden sm:inline">identify any song. instantly.</span>
         </div>
       </footer>
     </div>

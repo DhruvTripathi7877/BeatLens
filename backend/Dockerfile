@@ -19,6 +19,9 @@ RUN ./mvnw package -DskipTests -B
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
+# Install FFmpeg for multi-format audio decoding
+RUN apk add --no-cache ffmpeg
+
 # Create non-root user for security
 RUN addgroup -S beatlens && adduser -S beatlens -G beatlens
 

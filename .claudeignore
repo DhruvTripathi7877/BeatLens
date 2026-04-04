@@ -1,0 +1,26 @@
+# Build artifacts
+backend/target/
+frontend/dist/
+frontend/node_modules/
+
+# Binary / media files
+wav-files/
+
+# Lock files
+frontend/package-lock.json
+
+# Editor / OS metadata
+.vscode/
+.cursor/
+.DS_Store
+
+# CI/CD workflows (not needed for understanding/implementing)
+.github/
+
+# Maven wrapper binaries
+backend/mvnw
+backend/mvnw.cmd
+backend/.mvn/
+
+# Environment secrets
+.env

@@ -16,7 +16,7 @@ import java.util.Optional;
 
 /**
  * Orchestrates the matching pipeline:
- * query audio → fingerprints → hash lookup → time-alignment scoring.
+ * query audio → PCM (via FFmpeg) → fingerprints → hash lookup → time-alignment scoring.
  */
 @Service
 public class MatchService {
@@ -48,30 +48,20 @@ public class MatchService {
     }
 
     /**
-     * Match a WAV audio clip against the indexed database.
+     * Match any audio clip against the indexed database.
+     * FFmpeg handles format detection and decoding internally.
      *
-     * @param wavBytes raw WAV file bytes
+     * @param audioBytes raw bytes of any supported audio format
      * @return match response with ranked results
      */
-    public MatchResponse matchWav(byte[] wavBytes) {
+    public MatchResponse match(byte[] audioBytes) {
         double[] samples;
         try {
-            samples = audioProcessor.readBytes(wavBytes);
+            samples = audioProcessor.readBytes(audioBytes);
         } catch (Exception e) {
             throw new AudioProcessingException("Failed to decode query audio: " + e.getMessage(), e);
         }
-        return matchSamples(samples);
-    }
 
-    /**
-     * Match raw PCM bytes (16-bit LE mono 44100 Hz) against the indexed database.
-     */
-    public MatchResponse matchPcm(byte[] pcmBytes) {
-        double[] samples = audioProcessor.readPcmBytes(pcmBytes);
-        return matchSamples(samples);
-    }
-
-    private MatchResponse matchSamples(double[] samples) {
         if (samples.length < AudioConstants.FRAME_SIZE) {
             throw new AudioProcessingException("Query audio too short for fingerprinting");
         }
@@ -80,7 +70,6 @@ public class MatchService {
         log.info("Matching query: {}s, {} samples",
                 String.format("%.2f", queryDuration), samples.length);
 
-        // Pipeline: spectrogram → peaks → fingerprints
         double[][] spectrogram = spectrogramGenerator.generateSpectrogram(samples);
         List<PeakDetector.Peak> peaks = peakDetector.detectPeaks(spectrogram);
         List<FingerprintGenerator.Fingerprint> fingerprints = fingerprintGenerator.generateFingerprints(peaks);
@@ -91,11 +80,9 @@ public class MatchService {
             return new MatchResponse(List.of(), 0, queryDuration);
         }
 
-        // Match against database via cached lookup
         List<SongMatcher.MatchResult> coreResults = songMatcher.match(
                 fingerprints, lookupService::lookup);
 
-        // Convert to DTOs with song metadata
         List<MatchResultDto> dtos = new ArrayList<>();
         for (SongMatcher.MatchResult mr : coreResults) {
             Optional<Song> song = songRepository.findById(mr.getSongId());

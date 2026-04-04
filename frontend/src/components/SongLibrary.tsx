@@ -25,7 +25,6 @@ export default function SongLibrary() {
     fetchSongs();
   }, [fetchSongs]);
 
-  // Client-side filtering by title or artist
   const filteredSongs = useMemo(() => {
     if (!search.trim()) return songs;
     const q = search.toLowerCase();
@@ -58,138 +57,95 @@ export default function SongLibrary() {
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   };
 
-  // ── Loading state ──────────────────────────────────────────
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 gap-3">
-        <svg className="w-8 h-8 animate-spin text-cyan-400" fill="none" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-        </svg>
-        <span className="text-sm text-gray-500">Loading library...</span>
+      <div className="flex items-center justify-center py-16">
+        <span className="font-mono text-sm text-zinc-500">{'> loading library...'}</span>
       </div>
     );
   }
 
   return (
     <div className="w-full max-w-3xl mx-auto">
-      {/* ── Header row ──────────────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-        <div>
-          <h2 className="text-xl font-bold text-white">Song Library</h2>
-          <p className="text-sm text-gray-500 mt-0.5">
-            {songs.length} {songs.length === 1 ? 'song' : 'songs'} indexed
-          </p>
-        </div>
+      {/* Header row */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+        <p className="font-mono text-xs uppercase tracking-wider text-zinc-500">
+          // LIBRARY{' '}
+          <span className="text-zinc-700">({songs.length} {songs.length === 1 ? 'song' : 'songs'})</span>
+        </p>
 
         <div className="flex items-center gap-3">
-          {/* Search input */}
-          <div className="relative">
-            <svg
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
+          {/* Search */}
+          <div className="flex items-center">
+            <span className="font-mono text-green-400 text-sm mr-1">{'>'}</span>
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search songs..."
-              className="input-field pl-9 pr-4 py-2 text-sm w-56"
+              placeholder="search..."
+              className="terminal-input w-44 py-1.5 text-sm"
             />
           </div>
 
-          {/* Refresh button */}
+          {/* Refresh */}
           <button
             onClick={fetchSongs}
-            className="p-2 rounded-lg text-gray-500 hover:text-white hover:bg-white/[0.06] transition-all"
-            title="Refresh library"
+            className="font-mono text-xs text-zinc-600 hover:text-zinc-300 transition-colors"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
+            [refresh]
           </button>
         </div>
       </div>
 
-      {/* ── Error ───────────────────────────────────────────── */}
+      {/* Error */}
       {error && (
-        <div className="glass border-red-500/20 bg-red-500/[0.06] text-red-400 px-4 py-3 rounded-xl text-sm mb-4 animate-scale-in">
-          {error}
-        </div>
+        <p className="font-mono text-xs text-red-400 mb-3">[ERR] {error}</p>
       )}
 
-      {/* ── Empty state ─────────────────────────────────────── */}
+      {/* Empty states */}
       {songs.length === 0 ? (
-        <div className="glass p-12 text-center">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-white/[0.04] flex items-center justify-center">
-            <svg className="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z" />
-            </svg>
-          </div>
-          <p className="text-gray-300 font-medium">No songs indexed yet</p>
-          <p className="text-gray-500 text-sm mt-1.5 max-w-xs mx-auto">
-            Upload WAV files in the Upload tab to start building your fingerprint library.
+        <div className="terminal-box px-4 py-10 text-center">
+          <p className="font-mono text-sm text-zinc-500">[--] no songs indexed</p>
+          <p className="font-mono text-xs text-zinc-700 mt-1">
+            Upload WAV files in the Upload tab to build your library.
           </p>
         </div>
       ) : filteredSongs.length === 0 ? (
-        /* ── No search results ────────────────────────────────── */
-        <div className="glass p-8 text-center">
-          <p className="text-gray-400">No songs matching &ldquo;{search}&rdquo;</p>
+        <div className="terminal-box px-4 py-8 text-center">
+          <p className="font-mono text-sm text-zinc-500">[--] no results for &ldquo;{search}&rdquo;</p>
         </div>
       ) : (
-        /* ── Song list ────────────────────────────────────────── */
-        <div className="space-y-2">
+        /* Song list */
+        <div className="terminal-box divide-y divide-white/[0.06]">
           {filteredSongs.map((song, idx) => (
             <div
               key={song.id}
-              className="glass-hover p-4 flex items-center gap-4 group"
-              style={{ animationDelay: `${idx * 40}ms` }}
+              className="px-4 py-3 flex items-center gap-4 group transition-colors duration-150 hover:bg-zinc-800"
             >
-              {/* Track number / icon */}
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/10 to-teal-500/10 border border-white/[0.06] flex items-center justify-center flex-shrink-0">
-                <svg className="w-4 h-4 text-cyan-400" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
-                </svg>
-              </div>
+              {/* Track number */}
+              <span className="font-mono text-xs text-zinc-700 tabular-nums w-6 flex-shrink-0">
+                {String(idx + 1).padStart(2, '0')}
+              </span>
 
               {/* Song info */}
               <div className="flex-1 min-w-0">
-                <h3 className="text-white font-medium truncate text-sm">{song.title}</h3>
-                <p className="text-gray-500 text-xs truncate mt-0.5">
+                <p className="font-mono text-sm text-zinc-100 truncate">{song.title}</p>
+                <p className="font-mono text-xs text-zinc-500 truncate mt-0.5">
                   {song.artist || 'Unknown Artist'}
                 </p>
               </div>
 
-              {/* Metadata chips */}
-              <div className="hidden sm:flex items-center gap-3 text-[11px] text-gray-500 flex-shrink-0">
-                <span className="px-2 py-0.5 rounded-md bg-white/[0.04]">
-                  {formatDuration(song.durationSeconds)}
-                </span>
-                <span className="px-2 py-0.5 rounded-md bg-white/[0.04]">
-                  {song.fingerprintCount.toLocaleString()} fp
-                </span>
-                <span className="px-2 py-0.5 rounded-md bg-white/[0.04]">
-                  {formatDate(song.indexedAt)}
-                </span>
+              {/* Metadata */}
+              <div className="hidden sm:block font-mono text-xs text-zinc-600 flex-shrink-0 tabular-nums">
+                {formatDuration(song.durationSeconds)}{'  '}{song.fingerprintCount.toLocaleString()} fp{'  '}{formatDate(song.indexedAt)}
               </div>
 
-              {/* Delete button (visible on hover) */}
+              {/* Delete */}
               <button
                 onClick={() => handleDelete(song.id)}
-                className="opacity-0 group-hover:opacity-100 p-2 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-all"
-                title="Delete song"
+                className="opacity-0 group-hover:opacity-100 font-mono text-xs text-zinc-600 hover:text-red-400 transition-all ml-2"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
+                [x]
               </button>
             </div>
           ))}
